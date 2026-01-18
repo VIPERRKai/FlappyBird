@@ -154,7 +154,8 @@
             x: width / 4,
             y: height / 2,
             velocity: 0,
-            radius: 20,
+            width: 34,
+            height: 24,
             rotation: 0
         };
 
@@ -163,7 +164,7 @@
         let bestScore = parseInt(localStorage.getItem('flappyBestScore')) || 0;
         let gameActive = false;
         let gameStarted = false;
-        
+
         // Переменные для контроля времени
         let lastTime = 0;
         let accumulator = 0;
@@ -174,7 +175,7 @@
             const minHeight = 50;
             const maxHeight = height - PIPE_GAP - minHeight - 100;
             const topHeight = Math.random() * (maxHeight - minHeight) + minHeight;
-            
+
             pipes.push({
                 x: width,
                 topHeight: topHeight,
@@ -187,28 +188,53 @@
             ctx.save();
             ctx.translate(bird.x, bird.y);
             ctx.rotate(bird.rotation);
-            
-            // Тело птицы
-            ctx.fillStyle = '#FFD700';
-            ctx.beginPath();
-            ctx.arc(0, 0, bird.radius, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Клюв
-            ctx.fillStyle = '#FFA500';
-            ctx.beginPath();
-            ctx.moveTo(bird.radius, -5);
-            ctx.lineTo(bird.radius + 15, 0);
-            ctx.lineTo(bird.radius, 5);
-            ctx.closePath();
-            ctx.fill();
-            
-            // Глаз
-            ctx.fillStyle = '#000';
-            ctx.beginPath();
-            ctx.arc(bird.radius / 2, -bird.radius / 3, 4, 0, Math.PI * 2);
-            ctx.fill();
-            
+
+            const bw = bird.width;
+            const bh = bird.height;
+            const pixelSize = 2;
+
+            // Пиксельная птичка (как в оригинале Flappy Bird)
+            const pixels = [
+                // Формат: [x, y, цвет]
+                // Контур головы
+                [2,0,'#000'], [3,0,'#000'], [4,0,'#000'], [5,0,'#000'],
+                [1,1,'#000'], [6,1,'#000'],
+                [0,2,'#000'], [7,2,'#000'],
+                [0,3,'#000'], [7,3,'#000'],
+                [0,4,'#000'], [7,4,'#000'],
+                [1,5,'#000'], [6,5,'#000'],
+                [2,6,'#000'], [3,6,'#000'], [4,6,'#000'], [5,6,'#000'],
+
+                // Желтое тело
+                [2,1,'#FFD700'], [3,1,'#FFD700'], [4,1,'#FFD700'], [5,1,'#FFD700'],
+                [1,2,'#FFD700'], [2,2,'#FFD700'], [3,2,'#FFD700'], [4,2,'#FFD700'], [5,2,'#FFD700'], [6,2,'#FFD700'],
+                [1,3,'#FFD700'], [2,3,'#FFD700'], [3,3,'#FFD700'], [4,3,'#FFD700'], [5,3,'#FFD700'], [6,3,'#FFD700'],
+                [1,4,'#FFD700'], [2,4,'#FFD700'], [3,4,'#FFD700'], [4,4,'#FFD700'], [5,4,'#FFD700'], [6,4,'#FFD700'],
+                [2,5,'#FFD700'], [3,5,'#FFD700'], [4,5,'#FFD700'], [5,5,'#FFD700'],
+
+                // Белый глаз
+                [4,2,'#FFF'], [5,2,'#FFF'],
+                [4,3,'#FFF'], [5,3,'#FFF'],
+
+                // Черный зрачок
+                [5,2,'#000'], [5,3,'#000'],
+
+                // Оранжевый клюв
+                [7,3,'#FF8C00'], [8,3,'#FF8C00'],
+                [7,4,'#FF8C00'], [8,4,'#FF8C00'],
+                [9,3,'#FF6B00'], [9,4,'#FF6B00'],
+
+                // Крыло (оранжевое)
+                [2,4,'#FF8C00'], [3,4,'#FF8C00'],
+                [1,5,'#FF8C00'], [2,5,'#FF8C00'], [3,5,'#FF8C00'],
+            ];
+
+            // Рисуем пиксели
+            pixels.forEach(([x, y, color]) => {
+                ctx.fillStyle = color;
+                ctx.fillRect((x - 5) * pixelSize, (y - 3) * pixelSize, pixelSize, pixelSize);
+            });
+
             ctx.restore();
         }
 
@@ -217,16 +243,16 @@
             gradient.addColorStop(0, '#4CAF50');
             gradient.addColorStop(0.5, '#66BB6A');
             gradient.addColorStop(1, '#4CAF50');
-            
+
             ctx.fillStyle = gradient;
             ctx.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
             ctx.fillRect(pipe.x, pipe.bottomY, PIPE_WIDTH, height - pipe.bottomY);
-            
+
             ctx.strokeStyle = '#2E7D32';
             ctx.lineWidth = 3;
             ctx.strokeRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
             ctx.strokeRect(pipe.x, pipe.bottomY, PIPE_WIDTH, height - pipe.bottomY);
-            
+
             // Края труб
             ctx.fillStyle = '#2E7D32';
             ctx.fillRect(pipe.x - 5, pipe.topHeight - 30, PIPE_WIDTH + 10, 30);
@@ -246,17 +272,17 @@
         function drawGround() {
             const groundHeight = 50;
             const groundY = height - groundHeight;
-            
+
             ctx.fillStyle = '#DEB887';
             ctx.fillRect(0, groundY, width, groundHeight);
-            
+
             ctx.strokeStyle = '#8B4513';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(0, groundY);
             ctx.lineTo(width, groundY);
             ctx.stroke();
-            
+
             // Анимированная текстура земли
             const offset = Math.floor(cloudOffset * 0.1) % 20;
             for (let i = -20; i < width; i += 20) {
@@ -266,19 +292,23 @@
         }
 
         function checkCollision() {
+            // Хитбокс птицы (немного меньше для честности)
+            const birdLeft = bird.x - bird.width / 3;
+            const birdRight = bird.x + bird.width / 3;
+            const birdTop = bird.y - bird.height / 3;
+            const birdBottom = bird.y + bird.height / 3;
+
             // Проверка столкновения с трубами
             for (let pipe of pipes) {
-                if (bird.x + bird.radius > pipe.x && 
-                    bird.x - bird.radius < pipe.x + PIPE_WIDTH) {
-                    if (bird.y - bird.radius < pipe.topHeight || 
-                        bird.y + bird.radius > pipe.bottomY) {
+                if (birdRight > pipe.x && birdLeft < pipe.x + PIPE_WIDTH) {
+                    if (birdTop < pipe.topHeight || birdBottom > pipe.bottomY) {
                         return true;
                     }
                 }
             }
-            
+
             // Проверка столкновения с землей и потолком
-            if (bird.y + bird.radius > height - 50 || bird.y - bird.radius < 0) {
+            if (birdBottom > height - 50 || birdTop < 0) {
                 return true;
             }
             
