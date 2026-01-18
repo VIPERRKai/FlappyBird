@@ -98,7 +98,7 @@
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
-
+    
     <div id="startScreen">
         <div class="title">🐦 Flappy Bird</div>
         <div class="subtitle">Нажми, чтобы начать!</div>
@@ -134,7 +134,7 @@
             scale = window.devicePixelRatio || 1;
             width = window.innerWidth;
             height = window.innerHeight;
-
+            
             canvas.width = width * scale;
             canvas.height = height * scale;
             canvas.style.width = width + 'px';
@@ -142,11 +142,13 @@
             ctx.scale(scale, scale);
         });
 
-        const GRAVITY = 0.5;
-        const JUMP_STRENGTH = -10;
-        const PIPE_SPEED = 3;
+        // Константы игры (независимые от FPS)
+        const GRAVITY = 0.0008; // пикселей на мс²
+        const JUMP_STRENGTH = -0.5; // пикселей на мс
+        const PIPE_SPEED = 0.15; // пикселей на мс
         const PIPE_GAP = 180;
         const PIPE_WIDTH = 60;
+        const PIPE_SPAWN_INTERVAL = 1500; // мс
 
         let bird = {
             x: width / 4,
@@ -161,13 +163,18 @@
         let bestScore = parseInt(localStorage.getItem('flappyBestScore')) || 0;
         let gameActive = false;
         let gameStarted = false;
-        let frameCount = 0;
+        
+        // Переменные для контроля времени
+        let lastTime = 0;
+        let accumulator = 0;
+        let lastPipeTime = 0;
+        let cloudOffset = 0;
 
         function createPipe() {
             const minHeight = 50;
             const maxHeight = height - PIPE_GAP - minHeight - 100;
             const topHeight = Math.random() * (maxHeight - minHeight) + minHeight;
-
+            
             pipes.push({
                 x: width,
                 topHeight: topHeight,
@@ -180,12 +187,14 @@
             ctx.save();
             ctx.translate(bird.x, bird.y);
             ctx.rotate(bird.rotation);
-
+            
+            // Тело птицы
             ctx.fillStyle = '#FFD700';
             ctx.beginPath();
             ctx.arc(0, 0, bird.radius, 0, Math.PI * 2);
             ctx.fill();
-
+            
+            // Клюв
             ctx.fillStyle = '#FFA500';
             ctx.beginPath();
             ctx.moveTo(bird.radius, -5);
@@ -193,12 +202,13 @@
             ctx.lineTo(bird.radius, 5);
             ctx.closePath();
             ctx.fill();
-
+            
+            // Глаз
             ctx.fillStyle = '#000';
             ctx.beginPath();
             ctx.arc(bird.radius / 2, -bird.radius / 3, 4, 0, Math.PI * 2);
             ctx.fill();
-
+            
             ctx.restore();
         }
 
@@ -207,16 +217,17 @@
             gradient.addColorStop(0, '#4CAF50');
             gradient.addColorStop(0.5, '#66BB6A');
             gradient.addColorStop(1, '#4CAF50');
-
+            
             ctx.fillStyle = gradient;
             ctx.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
             ctx.fillRect(pipe.x, pipe.bottomY, PIPE_WIDTH, height - pipe.bottomY);
-
+            
             ctx.strokeStyle = '#2E7D32';
             ctx.lineWidth = 3;
             ctx.strokeRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
             ctx.strokeRect(pipe.x, pipe.bottomY, PIPE_WIDTH, height - pipe.bottomY);
-
+            
+            // Края труб
             ctx.fillStyle = '#2E7D32';
             ctx.fillRect(pipe.x - 5, pipe.topHeight - 30, PIPE_WIDTH + 10, 30);
             ctx.fillRect(pipe.x - 5, pipe.bottomY, PIPE_WIDTH + 10, 30);
@@ -235,68 +246,85 @@
         function drawGround() {
             const groundHeight = 50;
             const groundY = height - groundHeight;
-
+            
             ctx.fillStyle = '#DEB887';
             ctx.fillRect(0, groundY, width, groundHeight);
-
+            
             ctx.strokeStyle = '#8B4513';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(0, groundY);
             ctx.lineTo(width, groundY);
             ctx.stroke();
-
-            for (let i = 0; i < width; i += 20) {
+            
+            // Анимированная текстура земли
+            const offset = Math.floor(cloudOffset * 0.1) % 20;
+            for (let i = -20; i < width; i += 20) {
                 ctx.fillStyle = '#CD853F';
-                ctx.fillRect(i + (frameCount % 20), groundY + 10, 10, 10);
+                ctx.fillRect(i + offset, groundY + 10, 10, 10);
             }
         }
 
         function checkCollision() {
+            // Проверка столкновения с трубами
             for (let pipe of pipes) {
-                if (bird.x + bird.radius > pipe.x &&
+                if (bird.x + bird.radius > pipe.x && 
                     bird.x - bird.radius < pipe.x + PIPE_WIDTH) {
-                    if (bird.y - bird.radius < pipe.topHeight ||
+                    if (bird.y - bird.radius < pipe.topHeight || 
                         bird.y + bird.radius > pipe.bottomY) {
                         return true;
                     }
                 }
             }
-
+            
+            // Проверка столкновения с землей и потолком
             if (bird.y + bird.radius > height - 50 || bird.y - bird.radius < 0) {
                 return true;
             }
-
+            
             return false;
         }
 
-        function updateGame() {
+        function updateGame(deltaTime) {
             if (!gameActive) return;
-
-            frameCount++;
-
-            bird.velocity += GRAVITY;
-            bird.y += bird.velocity;
-
-            bird.rotation = Math.min(Math.max(bird.velocity * 0.05, -0.5), 0.5);
-
-            if (frameCount % 90 === 0) {
+            
+            // Ограничение deltaTime для предотвращения больших скачков
+            deltaTime = Math.min(deltaTime, 50);
+            
+            // Обновление физики птицы
+            bird.velocity += GRAVITY * deltaTime;
+            bird.y += bird.velocity * deltaTime;
+            
+            // Обновление вращения птицы
+            bird.rotation = Math.min(Math.max(bird.velocity * 0.1, -0.5), 0.5);
+            
+            // Создание труб по времени
+            accumulator += deltaTime;
+            if (accumulator - lastPipeTime >= PIPE_SPAWN_INTERVAL) {
                 createPipe();
+                lastPipeTime = accumulator;
             }
-
+            
+            // Обновление положения облаков
+            cloudOffset += PIPE_SPEED * deltaTime;
+            
+            // Обновление труб
             for (let i = pipes.length - 1; i >= 0; i--) {
-                pipes[i].x -= PIPE_SPEED;
-
+                pipes[i].x -= PIPE_SPEED * deltaTime;
+                
+                // Подсчет очков
                 if (!pipes[i].scored && pipes[i].x + PIPE_WIDTH < bird.x) {
                     score++;
                     pipes[i].scored = true;
                 }
-
+                
+                // Удаление труб за экраном
                 if (pipes[i].x + PIPE_WIDTH < 0) {
                     pipes.splice(i, 1);
                 }
             }
-
+            
+            // Проверка столкновений
             if (checkCollision()) {
                 gameOver();
             }
@@ -304,32 +332,39 @@
 
         function draw() {
             ctx.clearRect(0, 0, width, height);
-
+            
+            // Фон
             const gradient = ctx.createLinearGradient(0, 0, 0, height);
             gradient.addColorStop(0, '#4EC0CA');
             gradient.addColorStop(1, '#87CEEB');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, width, height);
-
+            
+            // Облака
             for (let i = 0; i < 5; i++) {
-                const x = (frameCount * 0.5 + i * width / 5) % width;
+                const x = ((cloudOffset * 0.3 + i * width / 5) % (width + 100)) - 50;
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
                 ctx.beginPath();
                 ctx.arc(x, 100 + i * 30, 20 + i * 5, 0, Math.PI * 2);
                 ctx.fill();
             }
-
+            
+            // Отрисовка игровых объектов
             pipes.forEach(drawPipe);
             drawBird();
             drawGround();
-
+            
             if (gameActive) {
                 drawScore();
             }
         }
 
-        function gameLoop() {
-            updateGame();
+        function gameLoop(currentTime) {
+            // Вычисление deltaTime
+            const deltaTime = lastTime ? currentTime - lastTime : 0;
+            lastTime = currentTime;
+            
+            updateGame(deltaTime);
             draw();
             requestAnimationFrame(gameLoop);
         }
@@ -345,9 +380,13 @@
             gameStarted = true;
             bird.y = height / 2;
             bird.velocity = 0;
+            bird.rotation = 0;
             pipes = [];
             score = 0;
-            frameCount = 0;
+            accumulator = 0;
+            lastPipeTime = 0;
+            cloudOffset = 0;
+            lastTime = 0;
         }
 
         function restartGame() {
@@ -357,19 +396,21 @@
 
         function gameOver() {
             gameActive = false;
-
+            
             if (score > bestScore) {
                 bestScore = score;
                 localStorage.setItem('flappyBestScore', bestScore);
             }
-
+            
             document.getElementById('finalScore').textContent = score;
             document.getElementById('bestScore').textContent = bestScore;
             document.getElementById('gameOverScreen').style.display = 'block';
-
+            
+            // Отправка результата в Telegram
             tg.sendData(score.toString());
         }
 
+        // Обработчики ввода
         canvas.addEventListener('click', jump);
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
@@ -383,7 +424,8 @@
             }
         });
 
-        gameLoop();
+        // Запуск игрового цикла
+        requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
