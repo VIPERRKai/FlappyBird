@@ -147,13 +147,13 @@
         // ========================================
 
         // Физика птицы
-        const GRAVITY = 0.001;           // Скорость падения (чем больше, тем быстрее падает)
-        const JUMP_STRENGTH = -0.35;       // Сила прыжка (чем больше число, тем выше прыгает)
+        const GRAVITY = 0.001;            // Скорость падения (чем больше, тем быстрее падает)
+        const JUMP_STRENGTH = -0.35;      // Сила прыжка (чем больше число, тем выше прыгает)
         const MAX_FALL_SPEED = 0.5;       // Максимальная скорость падения
         const MAX_RISE_SPEED = -0.5;      // Максимальная скорость подъема
 
         // Скорость игры
-        const GAME_SPEED = 1.0;            // Общая скорость игры (1.0 = нормально, 2.0 = в 2 раза быстрее)
+        const GAME_SPEED = 1.0;           // Общая скорость игры (1.0 = нормально, 2.0 = в 2 раза быстрее)
         const PIPE_SPEED = 0.15;          // Скорость движения труб (больше = быстрее)
 
         // Трубы
@@ -411,6 +411,40 @@
             }
         }
 
+        function drawCloud(x, y, scale) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+
+            // Облако состоит из нескольких окружностей
+            // Нижний ряд (основание)
+            ctx.beginPath();
+            ctx.arc(x, y, 15 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x + 25 * scale, y, 18 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x + 50 * scale, y, 15 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Верхний ряд (пушистость)
+            ctx.beginPath();
+            ctx.arc(x + 10 * scale, y - 10 * scale, 13 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x + 30 * scale, y - 15 * scale, 16 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x + 45 * scale, y - 10 * scale, 13 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
         function draw() {
             ctx.clearRect(0, 0, width, height);
 
@@ -421,14 +455,18 @@
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, width, height);
 
-            // Облака
-            for (let i = 0; i < 5; i++) {
-                const x = ((cloudOffset * 0.3 + i * width / 5) % (width + 100)) - 50;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-                ctx.beginPath();
-                ctx.arc(x, 100 + i * 30, 20 + i * 5, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            // Облака (пушистые)
+            const clouds = [
+                { x: (cloudOffset * 0.3) % (width + 100) - 50, y: 80, scale: 0.8 },
+                { x: (cloudOffset * 0.25 + 200) % (width + 100) - 50, y: 150, scale: 1.0 },
+                { x: (cloudOffset * 0.35 + 400) % (width + 100) - 50, y: 120, scale: 0.9 },
+                { x: (cloudOffset * 0.28 + 600) % (width + 100) - 50, y: 180, scale: 0.85 },
+                { x: (cloudOffset * 0.32 + 800) % (width + 100) - 50, y: 100, scale: 0.95 }
+            ];
+
+            clouds.forEach(cloud => {
+                drawCloud(cloud.x, cloud.y, cloud.scale);
+            });
 
             // Отрисовка игровых объектов
             pipes.forEach(drawPipe);
