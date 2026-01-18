@@ -142,13 +142,35 @@
             ctx.scale(scale, scale);
         });
 
-        // Константы игры (независимые от FPS)
-        const GRAVITY = 0.0008; // пикселей на мс²
-        const JUMP_STRENGTH = -0.5; // пикселей на мс
-        const PIPE_SPEED = 0.15; // пикселей на мс
-        const PIPE_GAP = 180;
-        const PIPE_WIDTH = 60;
-        const PIPE_SPAWN_INTERVAL = 1500; // мс
+        // ========================================
+        // 🎮 НАСТРОЙКИ ИГРЫ - ИЗМЕНЯЙТЕ ЗДЕСЬ!
+        // ========================================
+
+        // Физика птицы
+        const GRAVITY = 0.0008;           // Скорость падения (чем больше, тем быстрее падает)
+        const JUMP_STRENGTH = -0.5;       // Сила прыжка (чем больше число, тем выше прыгает)
+        const MAX_FALL_SPEED = 0.8;       // Максимальная скорость падения
+        const MAX_RISE_SPEED = -0.6;      // Максимальная скорость подъема
+
+        // Скорость игры
+        const GAME_SPEED = 1.0;            // Общая скорость игры (1.0 = нормально, 2.0 = в 2 раза быстрее)
+        const PIPE_SPEED = 0.15;          // Скорость движения труб (больше = быстрее)
+
+        // Трубы
+        const PIPE_GAP = 180;             // Расстояние между верхней и нижней трубой
+        const PIPE_WIDTH = 60;            // Ширина труб
+        const PIPE_SPAWN_INTERVAL = 1500; // Интервал появления труб в миллисекундах
+
+        // Размер птицы
+        const BIRD_SCALE = 3;             // Масштаб птицы (2 = нормально, 3 = больше, 4 = еще больше)
+
+        // Анимация птицы
+        const ROTATION_SPEED = 0.15;      // Скорость поворота птицы
+        const MAX_ROTATION_DOWN = 1.5;    // Максимальный наклон вниз (радианы)
+        const MAX_ROTATION_UP = -0.6;     // Максимальный наклон вверх (радианы)
+        const WING_FLAP_SPEED = 8;        // Скорость махов крыльями (больше = быстрее)
+
+        // ========================================
 
         let bird = {
             x: width / 4,
@@ -156,7 +178,8 @@
             velocity: 0,
             width: 34,
             height: 24,
-            rotation: 0
+            rotation: 0,
+            wingFrame: 0
         };
 
         let pipes = [];
@@ -189,13 +212,13 @@
             ctx.translate(bird.x, bird.y);
             ctx.rotate(bird.rotation);
 
-            const bw = bird.width;
-            const bh = bird.height;
-            const pixelSize = 2;
+            const pixelSize = BIRD_SCALE;
+
+            // Определяем позицию крыла в зависимости от анимации
+            const wingUp = Math.floor(bird.wingFrame) % 2 === 0;
 
             // Пиксельная птичка (как в оригинале Flappy Bird)
             const pixels = [
-                // Формат: [x, y, цвет]
                 // Контур головы
                 [2,0,'#000'], [3,0,'#000'], [4,0,'#000'], [5,0,'#000'],
                 [1,1,'#000'], [6,1,'#000'],
@@ -223,11 +246,22 @@
                 [7,3,'#FF8C00'], [8,3,'#FF8C00'],
                 [7,4,'#FF8C00'], [8,4,'#FF8C00'],
                 [9,3,'#FF6B00'], [9,4,'#FF6B00'],
-
-                // Крыло (оранжевое)
-                [2,4,'#FF8C00'], [3,4,'#FF8C00'],
-                [1,5,'#FF8C00'], [2,5,'#FF8C00'], [3,5,'#FF8C00'],
             ];
+
+            // Крыло (анимированное)
+            if (wingUp) {
+                // Крыло вверх
+                pixels.push(
+                    [2,3,'#FF8C00'], [3,3,'#FF8C00'],
+                    [1,4,'#FF8C00'], [2,4,'#FF8C00'], [3,4,'#FF8C00']
+                );
+            } else {
+                // Крыло вниз
+                pixels.push(
+                    [2,4,'#FF8C00'], [3,4,'#FF8C00'],
+                    [1,5,'#FF8C00'], [2,5,'#FF8C00'], [3,5,'#FF8C00']
+                );
+            }
 
             // Рисуем пиксели
             pixels.forEach(([x, y, color]) => {
@@ -293,10 +327,11 @@
 
         function checkCollision() {
             // Хитбокс птицы (немного меньше для честности)
-            const birdLeft = bird.x - bird.width / 3;
-            const birdRight = bird.x + bird.width / 3;
-            const birdTop = bird.y - bird.height / 3;
-            const birdBottom = bird.y + bird.height / 3;
+            const hitboxScale = BIRD_SCALE * 3;
+            const birdLeft = bird.x - hitboxScale;
+            const birdRight = bird.x + hitboxScale;
+            const birdTop = bird.y - hitboxScale;
+            const birdBottom = bird.y + hitboxScale;
 
             // Проверка столкновения с трубами
             for (let pipe of pipes) {
@@ -311,49 +346,65 @@
             if (birdBottom > height - 50 || birdTop < 0) {
                 return true;
             }
-            
+
             return false;
         }
 
         function updateGame(deltaTime) {
             if (!gameActive) return;
-            
+
             // Ограничение deltaTime для предотвращения больших скачков
             deltaTime = Math.min(deltaTime, 50);
-            
+
+            // Применяем общую скорость игры
+            deltaTime *= GAME_SPEED;
+
             // Обновление физики птицы
             bird.velocity += GRAVITY * deltaTime;
+
+            // Ограничение максимальной скорости падения и подъема
+            bird.velocity = Math.max(Math.min(bird.velocity, MAX_FALL_SPEED), MAX_RISE_SPEED);
+
             bird.y += bird.velocity * deltaTime;
-            
-            // Обновление вращения птицы
-            bird.rotation = Math.min(Math.max(bird.velocity * 0.1, -0.5), 0.5);
-            
+
+            // Плавная анимация поворота птицы
+            const targetRotation = bird.velocity > 0
+                ? Math.min(bird.velocity * ROTATION_SPEED * 3, MAX_ROTATION_DOWN)  // Падает - наклон вниз
+                : Math.max(bird.velocity * ROTATION_SPEED * 2, MAX_ROTATION_UP);   // Поднимается - наклон вверх
+
+            // Плавный переход к целевому углу
+            bird.rotation += (targetRotation - bird.rotation) * 0.2;
+
+            // Анимация крыльев (машет быстрее при прыжке)
+            const flapSpeed = bird.velocity < 0 ? WING_FLAP_SPEED * 2 : WING_FLAP_SPEED;
+            bird.wingFrame += deltaTime / (1000 / flapSpeed);
+
             // Создание труб по времени
             accumulator += deltaTime;
-            if (accumulator - lastPipeTime >= PIPE_SPAWN_INTERVAL) {
+            if (accumulator - lastPipeTime >= PIPE_SPAWN_INTERVAL / GAME_SPEED) {
                 createPipe();
                 lastPipeTime = accumulator;
             }
-            
+
             // Обновление положения облаков
             cloudOffset += PIPE_SPEED * deltaTime;
-            
+
             // Обновление труб
             for (let i = pipes.length - 1; i >= 0; i--) {
                 pipes[i].x -= PIPE_SPEED * deltaTime;
-                
+
                 // Подсчет очков
                 if (!pipes[i].scored && pipes[i].x + PIPE_WIDTH < bird.x) {
                     score++;
                     pipes[i].scored = true;
                 }
-                
+
                 // Удаление труб за экраном
                 if (pipes[i].x + PIPE_WIDTH < 0) {
                     pipes.splice(i, 1);
                 }
             }
-            
+
             // Проверка столкновений
             if (checkCollision()) {
                 gameOver();
@@ -362,14 +413,14 @@
 
         function draw() {
             ctx.clearRect(0, 0, width, height);
-            
+
             // Фон
             const gradient = ctx.createLinearGradient(0, 0, 0, height);
             gradient.addColorStop(0, '#4EC0CA');
             gradient.addColorStop(1, '#87CEEB');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, width, height);
-            
+
             // Облака
             for (let i = 0; i < 5; i++) {
                 const x = ((cloudOffset * 0.3 + i * width / 5) % (width + 100)) - 50;
@@ -378,12 +429,12 @@
                 ctx.arc(x, 100 + i * 30, 20 + i * 5, 0, Math.PI * 2);
                 ctx.fill();
             }
-            
+
             // Отрисовка игровых объектов
             pipes.forEach(drawPipe);
             drawBird();
             drawGround();
-            
+
             if (gameActive) {
                 drawScore();
             }
@@ -393,7 +444,7 @@
             // Вычисление deltaTime
             const deltaTime = lastTime ? currentTime - lastTime : 0;
             lastTime = currentTime;
-            
+
             updateGame(deltaTime);
             draw();
             requestAnimationFrame(gameLoop);
@@ -411,6 +462,7 @@
             bird.y = height / 2;
             bird.velocity = 0;
             bird.rotation = 0;
+            bird.wingFrame = 0;
             pipes = [];
             score = 0;
             accumulator = 0;
